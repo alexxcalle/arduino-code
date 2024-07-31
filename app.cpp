@@ -15,7 +15,7 @@
 DHT dht(DHTPIN, DHTTYPE);
 
 // Variables para almacenar lecturas de sensores
-float temperatura, humedad, calidadAire, monoxidoCarbono;
+float temperatura, humedad, co2, co;
 
 // Variable para almacenar el índice de calidad ambiental
 int indiceCalidad;
@@ -32,56 +32,58 @@ void setup() {
 }
 
 void loop() {
-  // Verificar si el switch está encendido
   if (digitalRead(SWITCH) == LOW) {
-    // Leer sensores
-    temperatura = dht.readTemperature();
-    humedad = dht.readHumidity();
-    calidadAire = analogRead(MQ135PIN);
-    monoxidoCarbono = analogRead(MQ7PIN);
-    
-    // Calcular índice de calidad (ejemplo simplificado)
+    leerSensores();
     indiceCalidad = calcularIndiceCalidad();
-    
-    // Activar indicadores según el índice de calidad
-    if (indiceCalidad < 33) {
-      digitalWrite(LED_VERDE, HIGH);
-      digitalWrite(LED_AMARILLO, LOW);
-      digitalWrite(LED_ROJO, LOW);
-      noTone(BUZZER);
-    } else if (indiceCalidad < 42) {
-      digitalWrite(LED_VERDE, LOW);
-      digitalWrite(LED_AMARILLO, HIGH);
-      digitalWrite(LED_ROJO, LOW);
-      noTone(BUZZER);
-    } else {
-      digitalWrite(LED_VERDE, LOW);
-      digitalWrite(LED_AMARILLO, LOW);
-      digitalWrite(LED_ROJO, HIGH);
-      tone(BUZZER, 1000, 100);
-    }
-    
-    // Imprimir lecturas en el monitor serial
+    activarIndicadores();
     imprimirLecturas();
-    
   } else {
-    // Apagar todos los indicadores si el switch está apagado
-    digitalWrite(LED_VERDE, LOW);
-    digitalWrite(LED_AMARILLO, LOW);
-    digitalWrite(LED_ROJO, LOW);
-    noTone(BUZZER);
+    apagarIndicadores();
   }
   
-  delay(2000); // Esperar 2 segundos antes de la siguiente lectura
+  delay(2000);
+}
+
+void leerSensores() {
+  temperatura = dht.readTemperature();
+  humedad = dht.readHumidity();
+  co2 = map(analogRead(MQ135PIN), 0, 1023, 400, 5000); // Mapeo aproximado a ppm de CO2
+  co = map(analogRead(MQ7PIN), 0, 1023, 0, 1000);      // Mapeo aproximado a ppm de CO
 }
 
 int calcularIndiceCalidad() {
-  // Este es un cálculo simplificado. Ajusta según tus necesidades específicas.
-  int indice = map(calidadAire, 0, 1023, 0, 33) +
-               map(monoxidoCarbono, 0, 1023, 0, 33) +
-               map(temperatura, 15, 35, 0, 17) +
-               map(humedad, 30, 70, 0, 17);
-  return constrain(indice, 0, 100);
+  int indiceCO2 = map(co2, 400, 2000, 0, 50);  // CO2 tiene más peso
+  int indiceCO = map(co, 0, 9, 0, 20);         // CO tiene menos peso
+  int indiceTemp = map(constrain(temperatura, 20, 25), 20, 25, 0, 15);
+  int indiceHum = map(constrain(humedad, 30, 60), 30, 60, 0, 15);
+  
+  return constrain(indiceCO2 + indiceCO + indiceTemp + indiceHum, 0, 100);
+}
+
+void activarIndicadores() {
+  if (indiceCalidad < 50 && co2 < 1000 && co < 9) {
+    digitalWrite(LED_VERDE, HIGH);
+    digitalWrite(LED_AMARILLO, LOW);
+    digitalWrite(LED_ROJO, LOW);
+    noTone(BUZZER);
+  } else if (indiceCalidad < 75 && co2 < 2000 && co < 35) {
+    digitalWrite(LED_VERDE, LOW);
+    digitalWrite(LED_AMARILLO, HIGH);
+    digitalWrite(LED_ROJO, LOW);
+    noTone(BUZZER);
+  } else {
+    digitalWrite(LED_VERDE, LOW);
+    digitalWrite(LED_AMARILLO, LOW);
+    digitalWrite(LED_ROJO, HIGH);
+    tone(BUZZER, 1000, 100);
+  }
+}
+
+void apagarIndicadores() {
+  digitalWrite(LED_VERDE, LOW);
+  digitalWrite(LED_AMARILLO, LOW);
+  digitalWrite(LED_ROJO, LOW);
+  noTone(BUZZER);
 }
 
 void imprimirLecturas() {
@@ -89,10 +91,10 @@ void imprimirLecturas() {
   Serial.print(temperatura);
   Serial.print(" °C, Humedad: ");
   Serial.print(humedad);
-  Serial.print(" %, Calidad del aire: ");
-  Serial.print(calidadAire);
-  Serial.print(", CO: ");
-  Serial.print(monoxidoCarbono);
-  Serial.print(", Índice de calidad: ");
+  Serial.print(" %, CO2: ");
+  Serial.print(co2);
+  Serial.print(" ppm, CO: ");
+  Serial.print(co);
+  Serial.print(" ppm, Índice de calidad: ");
   Serial.println(indiceCalidad);
 }
